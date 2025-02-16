@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+*.pyc
+tour_images/
+tour_data.json
+.env
+.DS_Store .env
