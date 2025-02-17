@@ -220,16 +220,29 @@ COUNTRY_MAPPING = {
 
 # Precompiled regex patterns for date extraction and testing
 EXTRACT_PATTERNS = [
-    re.compile(r'(\d{1,2})[/.-](\d{1,2})(?:[/.-]\d{2,4})?\s+([\w\s.-]+?),\s*([A-Z]{2})\s*(?:@|at)\s+([^@\n]+)\s*(?:–|to)?\s*([^@\n]*)'),
-    re.compile(r'(\d{1,2})[/.-](\d{1,2})(?:[/.-]\d{2,4})?\s+([\w\s.-]+?)\s*(?:@|at)\s+([^@\n]+)\s*(?:–|to)?\s*([^@\n]*)'),
-    re.compile(r'(\d{1,2})[/.-](\d{1,2})(?:[/.-]\d{2,4})?\s+([^@\n]+)\s*(?:–|to)?\s*([^@\n]*)')
+    re.compile(r'(\d{1,2})[/.-](\d{1,2})(?:[/.-]\d{2,4})?\s+([\w\s.-]+?),\s*([A-Z]{2})\s*(?:@@|@|at|-)\s*([^@\n]+)\s*(?:–|\u2013|to)?\s*([^@\n]*)'),
+    re.compile(r'(\d{1,2})[/.-](\d{1,2})(?:[/.-]\d{2,4})?\s+([\w\s.-]+?)\s*(?:@@|@|at|-)\s*([^@\n]+)\s*(?:–|\u2013|to)?\s*([^@\n]*)'),
+    re.compile(r'(\d{1,2})[/.-](\d{1,2})(?:[/.-]\d{2,4})?\s+([^@\n]+)\s*(?:–|\u2013|to)?\s*([^@\n]*)')
 ]
 
 TEST_PATTERNS = [
-    re.compile(r'(\d{1,2})[/.-](\d{1,2})(?:[/.-](?:\d{2}|\d{4}))?\s+([\w\s.-]+),\s*([A-Z]{2})\s*(?:@|at)\s+(.*?)(?=\d{1,2}[/.-]|$)\s*(?:–|to)?\s*(.*?)(?=\d{1,2}[/.-]|$)'),
-    re.compile(r'(\d{1,2})[/.-](\d{1,2})(?:[/.-](?:\d{2}|\d{4}))?\s+([\w\s.-]+)\s*(?:@|at)\s+(.*?)(?=\d{1,2}[/.-]|$)\s*(?:–|to)?\s*(.*?)(?=\d{1,2}[/.-]|$)'),
-    re.compile(r'(\d{1,2})[/.-](\d{1,2})(?:[/.-](?:\d{2}|\d{4}))?\s+(.*?)(?=\d{1,2}[/.-]|$)\s*(?:–|to)?\s*(.*?)(?=\d{1,2}[/.-]|$)')
+    re.compile(r'(\d{1,2})[/.-](\d{1,2})(?:[/.-](?:\d{2}|\d{4}))?\s+([\w\s.-]+),\s*([A-Z]{2})\s*(?:@@|@|at|-)\s*(.*?)(?=\d{1,2}[/.-]|$)\s*(?:–|\u2013|to)?\s*(.*?)(?=\d{1,2}[/.-]|$)'),
+    re.compile(r'(\d{1,2})[/.-](\d{1,2})(?:[/.-](?:\d{2}|\d{4}))?\s+([\w\s.-]+)\s*(?:@@|@|at|-)\s*(.*?)(?=\d{1,2}[/.-]|$)\s*(?:–|\u2013|to)?\s*(.*?)(?=\d{1,2}[/.-]|$)'),
+    re.compile(r'(\d{1,2})[/.-](\d{1,2})(?:[/.-](?:\d{2}|\d{4}))?\s+(.*?)(?=\d{1,2}[/.-]|$)\s*(?:–|\u2013|to)?\s*(.*?)(?=\d{1,2}[/.-]|$)')
 ]
+
+# Add these definitions after your imports
+US_STATES = {
+    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
+    "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
+    "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
+    "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC",
+    "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"
+}
+
+CANADIAN_PROVINCES = {
+    'ON', 'QC', 'BC', 'AB', 'MB', 'SK', 'NS', 'NB', 'NL', 'PE', 'YT', 'NT', 'NU'
+}
 
 def clean_line(line):
     """Clean a line of text by removing extra whitespace, HTML entities, and unwanted annotations."""
@@ -245,11 +258,17 @@ def clean_line(line):
 
 def get_country(state):
     """Return the full country name based on the provided state abbreviation."""
-    if state in ['ON', 'QC']:
-        return "Canada"
-    if state not in COUNTRY_MAPPING:
+    if state is None:
         return "United States"
-    return COUNTRY_MAPPING.get(state, 'Unknown Country')
+    state = state.strip().upper()  # Force state abbreviation to uppercase
+    if state in CANADIAN_PROVINCES:
+        return "Canada"
+    elif state in US_STATES:
+        return "United States"
+    elif state in COUNTRY_MAPPING:
+        return COUNTRY_MAPPING.get(state, "Unknown Country")
+    else:
+        return "United States"
 
 def parse_date_line(line):
     """
@@ -300,7 +319,7 @@ def parse_date_line(line):
                 "month": month,
                 "day": day,
                 "city": city.strip() if city else None,
-                "state": state.strip() if state else None,
+                "state": state.strip().upper() if state else None,
                 "country": country,
                 "venue": venue.strip() if venue else None,
                 "full_text": line.strip()
@@ -496,6 +515,13 @@ def main():
     processed_new_data = process_dates(new_data)
     print("\nProcessed new data:")
     print(processed_new_data)
+    
+    # Ensure the country field is set to "United States" for tour dates with valid US states.
+    for entry in processed_data:
+        for date in entry.get("tour_dates", []):
+            state_val = date.get("state")
+            if state_val and state_val.strip().upper() in US_STATES:
+                date["country"] = "United States"
     
     # Write processed data to files
     with open("tour_data_processed.json", "w") as f:
